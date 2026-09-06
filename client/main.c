@@ -18,8 +18,6 @@ int main (int argc , char *argv[]){
     int epfd = epoll_create(1);
     struct epoll_event event;
     event.events = EPOLLIN;
-    event.data.fd = sfd;
-    epoll_ctl(epfd,EPOLL_CTL_ADD,sfd,&event);
     event.data.fd = STDIN_FILENO;
     epoll_ctl(epfd,EPOLL_CTL_ADD,STDIN_FILENO,&event);
 
@@ -28,11 +26,7 @@ int main (int argc , char *argv[]){
         int readyNum = epoll_wait(epfd,readyEvent,1024,-1);
 
         for (int i = 0 ; i < readyNum ; ++i){
-            if (readyEvent[i].data.fd == sfd){
-                //服务端来信
-                receive_Information(sfd);
-            }
-            else if (readyEvent[i].data.fd == STDIN_FILENO){
+            if (readyEvent[i].data.fd == STDIN_FILENO){
                 //客户端发送消息
                 send_Message(sfd);
             }

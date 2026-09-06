@@ -3,28 +3,46 @@
 #ifndef __FUNCTION__
 #define __FUNCTION__
 
-int receive_Information(int sfd){
-    char buf[1024] = {0};
-    int sret = read(sfd,buf,sizeof(buf));
-    if (sret == 0){
-        printf ("Server disconnected\n");
-        close(sfd);
-        exit(0);
-    }
-    write(STDOUT_FILENO,buf,sret); 
-    
-    return 0;
-}
-
 int send_Message(int sfd){
     char buf[1024] = {0};
-    int rset = read(STDIN_FILENO,buf,sizeof(buf));
-    if (rset == 0){
-        printf ("Connection has been actively disconnected");
-        close (sfd);
-        exit(0);
+    int ret = read(STDIN_FILENO,buf,sizeof(buf));
+    if (ret == 0){
+        //客户端断开连接
+        return 0;
     }
-    write(sfd,buf,rset);
+    int argc = 0;
+    char *argv[10] = {0};
+    command_t command;
+    memset(&command,0,sizeof(command));
+    wordSegmentation(buf,&argc,argv,&command);
+
+    switch(command.cmd){
+    case CMD_CD:
+       cdFunction(sfd,&command,argv,argc);
+
+        break;
+    case CMD_LS:
+
+        break;
+    case CMD_PWD:
+
+        break;
+    case CMD_GETS:
+
+        break;
+    
+    case CMD_PUTS:
+
+        break;
+
+    case CMD_REMOVE:
+
+        break;
+    default:
+        printf("Unknown command\n");
+        break;
+    }
+
     return 0;
 }
 #endif

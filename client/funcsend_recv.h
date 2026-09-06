@@ -1,4 +1,5 @@
 #include <function.h>
+#include "protocol.h"
+#include "command.h"
 
-int receive_Information(int sfd);
 int send_Message(int sfd);
