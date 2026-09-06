@@ -45,13 +45,13 @@ int main(int argc,char  *argv[]){
                 //服务器接受客户端连接
                 int netfd = accept(sfd,NULL,NULL);
                 //创建一个节点分配任务
-                clientInfo_t clientInfo;
-                clientInfo.netfd = netfd;
-                strcpy(clientInfo.home,"/");
-                strcpy(clientInfo.cwd,"/");
+                clientInfo_t *clientInfo = (clientInfo_t *)malloc(sizeof(clientInfo_t));
+                clientInfo->netfd =netfd;
+                strcpy(clientInfo->home,"/home/shangshansaye/Project/sever");
+                strcpy(clientInfo->cwd,"/");
                 //加入任务队列
                 pthread_mutex_lock(&threadpool.mutex);
-                pushQueue(&threadpool.taskQueue,&clientInfo);
+                pushQueue(&threadpool.taskQueue,clientInfo);
                 printf ("accept new client\n");
                 pthread_mutex_unlock(&threadpool.mutex);
                 pthread_cond_signal(&threadpool.cond);

@@ -12,7 +12,7 @@ int handleCd(clientInfo_t *client, const char *path)
     }
     //cd .
     else if (strcmp(path,".") == 0){
-        
+        strcpy(newCwd,client->cwd);    
     }
     //cd ..
     else if (strcmp(path,"..") == 0){
@@ -88,7 +88,11 @@ int handleLs(clientInfo_t *client)
 }
 
 int handlePwd(clientInfo_t *client)
-{
+{   
+    char ccwd[1024] = {0};
+    sprintf(ccwd,"%s\n",client->cwd);
+    sendResponse(client->netfd,ccwd);
+
     return 0;
 }
 
