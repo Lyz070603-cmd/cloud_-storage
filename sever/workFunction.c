@@ -30,7 +30,7 @@ int workFunc(clientInfo_t *client)
                 break;
 
             case CMD_LS:
-                handleLs(client);
+                handleLs(client,command.data);
                 break;
 
             case CMD_PWD:
