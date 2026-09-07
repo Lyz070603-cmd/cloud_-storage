@@ -153,13 +153,137 @@ int handlePwd(clientInfo_t *client)
     return 0;
 }
 
+//客户端想要上传到服务端的文件
 int handlePuts(clientInfo_t *client, const char *filename)
 {
+    char path[1024] = {0};
+
+    sprintf(path, "%s%s/%s",
+            client->home,
+            client->cwd,
+            filename);
+
+    // 1. 告诉客户端可以上传
+    sendResponse(client->netfd, "READY");
+
+    // 2. 接收文件大小
+    off_t filesize;
+
+    int ret = recvAll(client->netfd,
+                      &filesize,
+                      sizeof(filesize));
+
+    if (ret <= 0) {
+        return -1;
+    }
+
+    printf("filesize = %ld\n", filesize);
+
+    // 3. 创建服务器文件
+    int fd = open(path,
+                  O_WRONLY | O_CREAT | O_TRUNC,
+                  0666);
+
+    if (fd == -1) {
+        perror("open");
+        return -1;
+    }
+
+    // 4. 接收文件内容
+    char buf[1024];
+
+    while (filesize > 0) {
+
+        int recvSize = sizeof(buf);
+
+        if (filesize < recvSize) {
+            recvSize = filesize;
+        }
+
+        ret = recvAll(client->netfd,
+                      buf,
+                      recvSize);
+
+        if (ret <= 0) {
+            close(fd);
+            return -1;
+        }
+
+        write(fd, buf, recvSize);
+        filesize -= recvSize;
+    }
+
+    close(fd);
+
+    // 5. 告诉客户端上传完成
+    sendResponse(client->netfd, "OK");
+    printf("Upload success\n");
+
     return 0;
 }
 
+//客户端想要从服务端获取的文件
 int handleGets(clientInfo_t *client, const char *filename)
 {
+    char newpath[1024] = {0};
+
+    sprintf(newpath,"%s%s/%s",client->home,client->cwd,filename);
+
+    //printf("%s\n", newpath);
+
+    // 打开服务器文件
+    int fd = open(newpath, O_RDONLY);
+    if (fd == -1) {
+        sendResponse(client->netfd, "NOT_FOUND");
+        return -1;
+    }
+
+    // 获取文件信息
+    struct stat st;
+
+    if (fstat(fd, &st) == -1) {
+        perror("fstat");
+        close(fd);
+        return -1;
+    }
+    if (S_ISDIR(st.st_mode)) {
+        close(fd);
+        sendResponse(client->netfd, "ERROR");
+        return 0;
+    }
+
+    off_t filesize = st.st_size;
+
+    // 告诉客户端：文件存在，可以开始传输
+    if (sendResponse(client->netfd, "READY") == -1) {
+        close(fd);
+        return -1;
+    }
+
+    // 发送文件大小
+    if (sendAll(client->netfd,&filesize,sizeof(filesize)) == -1) {
+        close(fd);
+        return -1;
+    }
+
+    // 开始发送文件
+    char buf[1024];
+    while (1) {
+        ssize_t ret = read(fd, buf, sizeof(buf));
+        if (ret == 0) {
+            break;
+        }
+
+        if (sendAll(client->netfd,buf,ret) == -1) {
+            close(fd);
+            return -1;
+        }
+    }
+
+    close(fd);
+
+    // 文件传输完成
+    sendResponse(client->netfd, "OK");
     return 0;
 }
 
