@@ -181,3 +181,33 @@ int putsFunction(int sfd, command_t *command, char *argv[], int argc)
 
     return 0;
 }
+int removeFunction(int sfd, command_t *command, char *argv[], int argc)
+{
+    if (argc != 2) {
+        printf("Format error\n");
+        return 0;
+    }
+
+    // 设置命令
+    command->cmd = CMD_REMOVE;
+
+    // 设置文件名
+    strcpy(command->data, argv[1]);
+    command->len = strlen(command->data);
+
+    // 发送命令
+    sendCommand(sfd, command);
+
+    // 等待服务器回复
+    command_t response;
+    recvCommand(sfd, &response);
+
+    if (strcmp(response.data, "OK") == 0) {
+        printf("Remove success\n");
+    }
+    else {
+        printf("This file does not exist\n");
+    }
+
+    return 0;
+}
