@@ -6,7 +6,7 @@
 
 int handleCd(clientInfo_t *client, const char *path);
 
-int handleLs(clientInfo_t *client);
+int handleLs(clientInfo_t *client,const char *path);
 
 int handlePwd(clientInfo_t *client);
 

@@ -13,7 +13,7 @@ int initQueue(taskQueue_t *taskQueue){
 }
 
 int pushQueue(taskQueue_t *taskQueue, clientInfo_t * clientInfo){
-    
+
     node_t *p = (node_t *)malloc(sizeof(node_t));
     p->clientInfo = clientInfo;
     p->next = NULL;
@@ -37,7 +37,9 @@ clientInfo_t * popQueue(taskQueue_t * taskQueue){
     else {
         node_t *p = taskQueue->front;
         taskQueue->front = taskQueue->front->next;
-        
+        if (taskQueue->front == NULL) {
+            taskQueue->rear = NULL;
+        }
         clientInfo_t *client = p->clientInfo;
         free(p);
         taskQueue->sizeQueue--;
