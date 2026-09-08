@@ -1,5 +1,7 @@
 #include"command.h"
 
+
+
 int cdFunction(int sfd,command_t *command,char * argv[],int argc){
     if (argc <= 1 || argc > 2){
         printf ("Format error\n");

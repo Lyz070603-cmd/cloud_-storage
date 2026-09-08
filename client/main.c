@@ -1,6 +1,6 @@
 #include <function.h>
 #include "funcsend_recv.h"
-
+#include "login.h"
 int main (int argc , char *argv[]){
     ARGS_CHECK(argc,3);
 
@@ -14,6 +14,10 @@ int main (int argc , char *argv[]){
     ERROR_CHECK(ret, -1, "connect");
     printf ("Connect succes!\n");
     
+    if (loginFunction(sfd) != 0){
+        printf("No such user on the server\n");
+        exit(0);
+    }
     //开始设置监听集合
     int epfd = epoll_create(1);
     struct epoll_event event;
