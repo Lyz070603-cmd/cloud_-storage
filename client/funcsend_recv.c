@@ -23,16 +23,19 @@ int send_Message(int sfd){
         break;
     case CMD_LS:
 
+        lsFunction(sfd,&command,argv,argc);
         break;
     case CMD_PWD:
+        pwdFunction(sfd,&command,argv,argc);
 
         break;
     case CMD_GETS:
 
+        getsFunction(sfd,&command,argv,argc);
         break;
     
     case CMD_PUTS:
-
+        putsFunction(sfd,&command,argv,argc);
         break;
 
     case CMD_REMOVE:
