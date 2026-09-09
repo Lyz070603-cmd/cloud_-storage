@@ -10,5 +10,4 @@ int lsFunction(int sfd,command_t *command,char * argv[],int argc);
 int getsFunction(int sfd,command_t *command,char * argv[],int argc);
 int putsFunction(int sfd, command_t *command, char *argv[], int argc);
 int removeFunction(int sfd, command_t *command, char *argv[], int argc);
-
 #endif
