@@ -36,6 +36,7 @@ int loginhandle(clientInfo_t *clientInfo){
                     sprintf(home,"%s/%s","/home/shangshansaye/sever_project/sever/test",name);
                     strcpy(clientInfo->home,home);
                     strcpy(clientInfo->cwd,"/");
+                    strcpy(clientInfo->name,name);
                     //登录成功
                     //开始接受客户端的命令
                     memset(res,0,sizeof(res));

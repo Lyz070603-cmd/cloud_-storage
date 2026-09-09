@@ -158,28 +158,36 @@ int handlePuts(clientInfo_t *client, const char *filename)
 {
     char path[1024] = {0};
 
-    sprintf(path, "%s%s/%s",
-            client->home,
-            client->cwd,
-            filename);
+    // 拼接服务器上的完整路径
+    snprintf(path,
+             sizeof(path),
+             "%s%s/%s",
+             client->home,
+             client->cwd,
+             filename);
 
-    // 1. 告诉客户端可以上传
-    sendResponse(client->netfd, "READY");
+    //告诉客户端：可以开始上传
+    if (sendResponse(client->netfd, "READY") == -1) {
+        perror("sendResponse READY");
+        return -1;
+    }
 
-    // 2. 接收文件大小
-    off_t filesize;
+    //接收文件大小
+    off_t filesize = 0;
 
-    int ret = recvAll(client->netfd,
-                      &filesize,
-                      sizeof(filesize));
+    if (recvAll(client->netfd,
+                &filesize,
+                sizeof(filesize)) == -1) {
 
-    if (ret <= 0) {
+        perror("recvAll filesize");
         return -1;
     }
 
     printf("filesize = %ld\n", filesize);
 
-    // 3. 创建服务器文件
+    
+    //创建服务器文件
+    
     int fd = open(path,
                   O_WRONLY | O_CREAT | O_TRUNC,
                   0666);
@@ -189,35 +197,49 @@ int handlePuts(clientInfo_t *client, const char *filename)
         return -1;
     }
 
-    // 4. 接收文件内容
+    
+    // 接收文件内容
+    
     char buf[1024];
+    off_t received = 0;
 
-    while (filesize > 0) {
+    while (received < filesize) {
 
-        int recvSize = sizeof(buf);
+        size_t recvSize = sizeof(buf);
 
-        if (filesize < recvSize) {
-            recvSize = filesize;
+        if (filesize - received < (off_t)recvSize) {
+            recvSize = filesize - received;
         }
 
-        ret = recvAll(client->netfd,
-                      buf,
-                      recvSize);
+        int ret = recvAll(client->netfd,
+                          buf,
+                          recvSize);
 
-        if (ret <= 0) {
+        if (ret == -1) {
+            perror("recvAll file");
             close(fd);
             return -1;
         }
 
-        write(fd, buf, recvSize);
-        filesize -= recvSize;
+        if (write(fd, buf, recvSize) != (ssize_t)recvSize) {
+            perror("write");
+            close(fd);
+            return -1;
+        }
+
+        received += recvSize;
     }
 
     close(fd);
 
-    // 5. 告诉客户端上传完成
-    sendResponse(client->netfd, "OK");
-    printf("Upload success\n");
+     // 告诉客户端上传完成
+     
+    if (sendResponse(client->netfd, "OK") == -1) {
+        perror("sendResponse OK");
+        return -1;
+    }
+
+    printf("Upload success: %s\n", path);
 
     return 0;
 }
@@ -225,16 +247,24 @@ int handlePuts(clientInfo_t *client, const char *filename)
 //客户端想要从服务端获取的文件
 int handleGets(clientInfo_t *client, const char *filename)
 {
-    char newpath[1024] = {0};
+    char path[1024] = {0};
 
-    sprintf(newpath,"%s%s/%s",client->home,client->cwd,filename);
-
-    //printf("%s\n", newpath);
+    // 拼接服务器文件完整路径
+    snprintf(path,
+             sizeof(path),
+             "%s%s/%s",
+             client->home,
+             client->cwd,
+             filename);
 
     // 打开服务器文件
-    int fd = open(newpath, O_RDONLY);
+    int fd = open(path, O_RDONLY);
+
     if (fd == -1) {
+
+        perror("open");
         sendResponse(client->netfd, "NOT_FOUND");
+
         return -1;
     }
 
@@ -242,48 +272,131 @@ int handleGets(clientInfo_t *client, const char *filename)
     struct stat st;
 
     if (fstat(fd, &st) == -1) {
+
         perror("fstat");
         close(fd);
+
+        sendResponse(client->netfd, "ERROR");
+
         return -1;
     }
-    if (S_ISDIR(st.st_mode)) {
+
+    // 判断是否为普通文件
+    if (!S_ISREG(st.st_mode)) {
+
         close(fd);
+
         sendResponse(client->netfd, "ERROR");
+
+        return -1;
+    }
+
+    // 获取服务器文件大小
+    off_t filesize = st.st_size;
+
+    // 告诉客户端文件可以下载
+    if (sendResponse(client->netfd, "READY") == -1) {
+
+        perror("sendResponse READY");
+        close(fd);
+
+        return -1;
+    }
+
+    // 接收客户端已经拥有的文件大小
+    off_t offset = 0;
+
+    if (recvAll(client->netfd, &offset, sizeof(offset)) == -1) {
+
+        perror("recvAll offset");
+        close(fd);
+
+        return -1;
+    }
+
+    printf("Client offset = %ld\n", offset);
+    printf("Server filesize = %ld\n", filesize);
+
+    // 检查客户端发送的断点位置是否合法
+    if (offset < 0 || offset > filesize) {
+        offset = 0;
+    }
+
+    // 将服务器文件大小发送给客户端
+    if (sendAll(client->netfd, &filesize, sizeof(filesize)) == -1) {
+
+        perror("sendAll filesize");
+        close(fd);
+
+        return -1;
+    }
+
+    // 如果客户端已经拥有完整文件，则直接结束
+    if (offset == filesize) {
+
+        close(fd);
+
+        sendResponse(client->netfd, "OK");
+
+        printf("File already complete\n");
+
         return 0;
     }
 
-    off_t filesize = st.st_size;
+    // 定位到断点位置
+    if (lseek(fd, offset, SEEK_SET) == (off_t)-1) {
 
-    // 告诉客户端：文件存在，可以开始传输
-    if (sendResponse(client->netfd, "READY") == -1) {
+        perror("lseek");
         close(fd);
+
         return -1;
     }
 
-    // 发送文件大小
-    if (sendAll(client->netfd,&filesize,sizeof(filesize)) == -1) {
-        close(fd);
-        return -1;
-    }
-
-    // 开始发送文件
+    // 发送剩余文件数据
     char buf[1024];
-    while (1) {
+    off_t sent = offset;
+
+    while (sent < filesize) {
+
+        // 读取文件数据
         ssize_t ret = read(fd, buf, sizeof(buf));
+
         if (ret == 0) {
             break;
         }
 
-        if (sendAll(client->netfd,buf,ret) == -1) {
+        if (ret == -1) {
+
+            perror("read");
             close(fd);
+
             return -1;
         }
+
+        // 发送文件数据
+        if (sendAll(client->netfd, buf, ret) == -1) {
+
+            perror("sendAll file");
+            close(fd);
+
+            return -1;
+        }
+
+        sent += ret;
     }
 
     close(fd);
 
-    // 文件传输完成
-    sendResponse(client->netfd, "OK");
+    // 告诉客户端下载完成
+    if (sendResponse(client->netfd, "OK") == -1) {
+
+        perror("sendResponse OK");
+
+        return -1;
+    }
+
+    printf("Download success: %s\n", path);
+
     return 0;
 }
 

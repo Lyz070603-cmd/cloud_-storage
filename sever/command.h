@@ -1,6 +1,8 @@
 #ifndef COMMAND_H
 #define COMMAND_H
 
+#define MMAP_SIZE (100 * 1024 * 1024)
+
 #include<function.h>
 #include "clientInfo.h"
 

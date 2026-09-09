@@ -7,6 +7,7 @@ typedef struct {
     int netfd;
     char home[1024];
     char cwd[1024];
+    char name[64];
 } clientInfo_t;
 
 #endif
