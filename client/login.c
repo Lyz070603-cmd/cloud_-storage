@@ -8,8 +8,13 @@ int loginFunction(int sfd){
         //第一次判断账户名称
         memset(buf,0,sizeof(buf));
         printf("Account Name:");
-        read(STDIN_FILENO,buf,sizeof(buf));
-
+        fflush(stdout);
+        ret = read(STDIN_FILENO,buf,sizeof(buf));
+        if(ret <= 0){
+            return -1;
+        }
+        buf[ret] = '\0';
+        buf[strcspn(buf, "\n")] = '\0';
         sendResponse(sfd,buf);
 
         memset(res,0,sizeof(res));
@@ -22,15 +27,19 @@ int loginFunction(int sfd){
         if (strcmp(res,"OK") == 0){
 
             while(1){
-                memset(buf,0,sizeof(buf));
-                printf("Account Password:");
-                read(STDIN_FILENO,buf,sizeof(buf));
-
-                sendResponse(sfd,buf);
+                char *passwd = NULL;
+                passwd = getpass("Account Password: ");
+                if (passwd == NULL){
+                    return -1;
+                }
+                sendResponse(sfd,passwd);
 
                 memset(res,0,sizeof(res));
-                recvResponse(sfd,res,sizeof(res));
+                ret = recvResponse(sfd,res,sizeof(res));
 
+                if(ret <= 0){
+                    return -1;
+                }
                 //登录成功返回0
                 if (strcmp(res,"OK") == 0){
                     printf("Login successful\n");
