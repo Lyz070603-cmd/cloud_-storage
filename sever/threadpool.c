@@ -1,6 +1,5 @@
 #include "threadpool.h"
-#include "workFunction.h"
-
+#include "login.h"
 #ifndef __THREADPOOL__
 #define __THREADPOOL__
 
@@ -46,7 +45,7 @@ void * threadFunc (void *arg){
         //开始正式工作
         pthread_mutex_unlock(&threadpool->mutex);
 
-        workFunc(clientInfo);
+        loginhandle(clientInfo);
 
         printf("over\n");
     }
