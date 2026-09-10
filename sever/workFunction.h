@@ -2,6 +2,7 @@
 #include"clientInfo.h"
 #include"protocol.h"
 #include "command.h"
+#include "logrecord.h"
 int workFunc(clientInfo_t * clientInfo);
 int handleCd(clientInfo_t *client,const char *path);
 int handleLs(clientInfo_t *client,const char *path);

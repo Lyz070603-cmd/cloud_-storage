@@ -1,6 +1,7 @@
 #ifndef __LOGIN__
 #define __LOGIN__
 
+#include "logrecord.h"
 #include "clientInfo.h"
 #include "protocol.h"
 #include <function.h>
