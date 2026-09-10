@@ -37,6 +37,7 @@ int loginhandle(clientInfo_t *clientInfo){
                     strcpy(clientInfo->home,home);
                     strcpy(clientInfo->cwd,"/");
                     strcpy(clientInfo->name,name);
+                    LOG(clientInfo->name,"success connect",0);
                     //登录成功
                     //开始接受客户端的命令
                     memset(res,0,sizeof(res));

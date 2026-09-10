@@ -25,30 +25,44 @@ int workFunc(clientInfo_t *client)
         // 2. 根据命令类型进行分发
         switch (command.cmd) {
 
-            case CMD_CD:
-                handleCd(client, command.data);
+            case CMD_CD:{
+                ret = handleCd(client, command.data);
+                char st[128] = {0};
+                sprintf(st,"cd %s",command.data);
+                LOG(client->name,st,ret);
                 break;
-
-            case CMD_LS:
-                handleLs(client,command.data);
+            }
+            case CMD_LS:{
+                ret = handleLs(client,command.data);
+                LOG(client->name,"ls",ret);
                 break;
-
-            case CMD_PWD:
-                handlePwd(client);
+            }
+            case CMD_PWD:{
+                ret = handlePwd(client);
+                LOG(client->name,"pwd",ret);
                 break;
-
-            case CMD_PUTS:
-                handlePuts(client, command.data);
+            }
+            case CMD_PUTS:{
+                ret = handlePuts(client, command.data);
+                char st[128] = {0};
+                sprintf(st,"puts %s",command.data);
+                LOG(client->name,st,ret);
                 break;
-
-            case CMD_GETS:
-                handleGets(client, command.data);
+            }
+            case CMD_GETS:{
+                ret = handleGets(client, command.data);
+                char st[128] = {0};
+                sprintf(st,"gets %s",command.data);
+                LOG(client->name,st,ret);
                 break;
-
-            case CMD_REMOVE:
-                handleRemove(client, command.data);
+            }
+            case CMD_REMOVE:{
+                ret = handleRemove(client, command.data);
+                char st[128] = {0};
+                sprintf(st,"remove %s",command.data);
+                LOG(client->name,st,ret);
                 break;
-
+            }
             default:
                 // 未知命令
                 sendResponse(client->netfd, "Unknown command");

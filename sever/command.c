@@ -404,36 +404,31 @@ int handleRemove(clientInfo_t *client, const char *filename)
 {
      char path[1024] = {0};
 
-    // 拼接服务器上的实际路径
-    sprintf(path, "%s%s/%s",
-            client->home,
-            client->cwd,
-            filename);
+    snprintf(path, sizeof(path),
+             "%s%s/%s",
+             client->home,
+             client->cwd,
+             filename);
 
-    printf("remove path: %s\n", path);
 
-    // 获取文件信息
     struct stat st;
 
     if (stat(path, &st) == -1) {
         sendResponse(client->netfd, "ERROR");
-        return 0;
+        return -1;
     }
 
-    // 不允许删除目录
     if (S_ISDIR(st.st_mode)) {
         sendResponse(client->netfd, "ERROR");
-        return 0;
+        return -1;
     }
 
-    // 删除文件
     if (unlink(path) == -1) {
         perror("unlink");
         sendResponse(client->netfd, "ERROR");
-        return 0;
+        return -1;
     }
 
-    // 删除成功
     sendResponse(client->netfd, "OK");
 
     return 0;
