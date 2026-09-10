@@ -407,29 +407,33 @@ int removeFunction(int sfd, command_t *command, char *argv[], int argc)
 {
     if (argc != 2) {
         printf("Format error\n");
-        return 0;
+        return -1;
     }
 
-    // 设置命令
+    memset(command, 0, sizeof(command_t));
+
     command->cmd = CMD_REMOVE;
 
-    // 设置文件名
     strcpy(command->data, argv[1]);
     command->len = strlen(command->data);
 
-    // 发送命令
-    sendCommand(sfd, command);
+    if (sendCommand(sfd, command) == -1) {
+        perror("sendCommand");
+        return -1;
+    }
 
-    // 等待服务器回复
-    command_t response;
-    recvCommand(sfd, &response);
+    char response[1000] = {0};
 
-    if (strcmp(response.data, "OK") == 0) {
+    if (recvResponse(sfd, response, sizeof(response)) == -1) {
+        perror("recvResponse");
+        return -1;
+    }
+
+    if (strcmp(response, "OK") == 0) {
         printf("Remove success\n");
-    }
-    else {
-        printf("This file does not exist\n");
+        return 0;
     }
 
-    return 0;
+    printf("This file does not exist\n");
+    return -1;
 }

@@ -39,7 +39,7 @@ int send_Message(int sfd){
         break;
 
     case CMD_REMOVE:
-
+        removeFunction(sfd,&command,argv,argc);
         break;
     default:
         printf("Unknown command\n");
