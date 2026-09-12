@@ -1,5 +1,5 @@
 #include "threadpool.h"
-#include "login.h"
+#include "threadworkflow.h"
 #ifndef __THREADPOOL__
 #define __THREADPOOL__
 
@@ -41,12 +41,23 @@ void * threadFunc (void *arg){
             }
         }
         clientInfo_t *clientInfo = popQueue(&threadpool->taskQueue);
+        //开始连接数据库
+        struct MYSQL *mysql = mysql_init(NULL);
+        mysql_real_connect(mysql,"localhost","root","Lyz610831","mydb",0,NULL,0);
+
+        if (mysql == NULL) {
+        fprintf(stderr, "mysql_init failed\n");
+        return NULL;
+        }
+        clientInfo->mysql = mysql;
         printf("begin working\n");
+        
         //开始正式工作
         pthread_mutex_unlock(&threadpool->mutex);
 
-        loginhandle(clientInfo);
+        thread_workflow(clientInfo);
 
+        mysql_close(mysql);
         printf("over\n");
     }
     return 0;

@@ -1,83 +1,261 @@
 #include "login.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <unistd.h>
 
 int loginhandle(clientInfo_t *clientInfo){
-
-    char buf[1024] = {0};
-    char res[64] = {0};
-    char name[1024] = {0};
-    int ret = 0;
-    struct spwd *sp;
-
     while(1){
-        //判断账户名称
-        memset(buf,0,sizeof(buf));
-        ret =  recvResponse(clientInfo->netfd,buf,sizeof(buf));
-        if (ret == 0 || ret == -1){
-            return 0;
+        int flag = 0;
+        int ret = recvAll(clientInfo->netfd, &flag, sizeof(flag));
+        if (ret <= 0) {
+            return -1;
         }
-        //开始寻找用户名称
+        //注册账户
+        if (flag == SIGNUP){
 
-        if ((sp = getspnam(buf)) != NULL){
-            strcpy(res,"OK");
-            sendResponse(clientInfo->netfd,res);
-            strcpy(name,buf);
-            //开始接受密码
-            while(1){
-                memset(buf,0,sizeof(buf));
-                recvResponse(clientInfo->netfd,buf,sizeof(buf));
-                char salt[512] = {0}; 
-                get_salt(salt,sp->sp_pwdp);
-                
-                char *encrypted = crypt(buf, salt);
+            while (1) {
 
-                if(strcmp(sp->sp_pwdp,encrypted) == 0){
+                char name[64] = {0};
+                char passwd[32] = {0};
+                char response[100] = {0};
 
-                    char home[1024] = {0};
-                    sprintf(home,"%s/%s","/home/shangshansaye/sever_project/sever/test",name);
-                    strcpy(clientInfo->home,home);
-                    strcpy(clientInfo->cwd,"/");
-                    strcpy(clientInfo->name,name);
-                    LOG(clientInfo->name,"success connect",0);
-                    //登录成功
-                    //开始接受客户端的命令
-                    memset(res,0,sizeof(res));
-                    strcpy(res,"OK");
-                    sendResponse(clientInfo->netfd,res);
-                    workFunc(clientInfo);
+                // 接收用户名
+                ret = recvResponse(clientInfo->netfd,
+                                   name,
+                                   sizeof(name));
 
-                    return 0;
+                if (ret <= 0) {
+                    return -1;
                 }
-                else {
 
-                    memset(res,0,sizeof(res));
-                    strcpy(res,"NO");
-                    sendResponse(clientInfo->netfd,res);
+                // 接收密码
+                ret = recvResponse(clientInfo->netfd,
+                                   passwd,
+                                   sizeof(passwd));
+
+                if (ret <= 0) {
+                    return -1;
+                }
+
+                printf("Register username: %s\n", name);
+
+                // 转义用户名，防止 SQL 注入
+                char nameEscaped[2 * sizeof(name) + 1] = {0};
+                mysql_real_escape_string(clientInfo->mysql,
+                                         nameEscaped,
+                                         name,
+                                         (unsigned long)strlen(name));
+
+                // 查询用户名是否已经存在
+                char sql[512] = {0};
+
+                snprintf(sql,
+                         sizeof(sql),
+                         "SELECT id FROM User WHERE name='%s'",
+                         nameEscaped);
+
+                if (mysql_query(clientInfo->mysql, sql) != 0) {
+                    sendResponse(clientInfo->netfd, "ERROR");
                     continue;
                 }
 
+                // 获取查询结果
+                MYSQL_RES *result = mysql_store_result(clientInfo->mysql);
 
-            }
-        }        
-        else {
-            memset(res,0,sizeof(res));
-            strcpy(res,"NO");
-            sendResponse(clientInfo->netfd,res);
-            continue;
+                if (result == NULL) {
+                    sendResponse(clientInfo->netfd, "ERROR");
+                    continue;
+                }
+
+                // 用户名已经存在
+                if (mysql_num_rows(result) > 0) {
+                    mysql_free_result(result);
+                    sendResponse(clientInfo->netfd,
+                                 "USER_EXISTS");
+                    continue;
+                }
+
+                mysql_free_result(result);
+                // 生成随机 salt
+                char salt[64] = {0};
+                if (generateSalt(salt) == -1) {
+
+                    sendResponse(clientInfo->netfd,
+                                 "ERROR");
+
+                    continue;
+                }
+
+                printf("salt = %s\n", salt);
+
+                // 使用 crypt 对密码进行加密
+                char *ciphertext = crypt(passwd, salt);
+                if (ciphertext == NULL) {
+
+                    perror("crypt");
+
+                    sendResponse(clientInfo->netfd,
+                                 "ERROR");
+
+                    continue;
+                }
+                printf("password = %s\n", ciphertext);
+                // 将用户名、salt 和密码密文写入数据库
+                memset(sql, 0, sizeof(sql));
+                snprintf(sql,
+                         sizeof(sql),
+                         "INSERT INTO User(name,salt,password) "
+                         "VALUES('%s','%s','%s')",
+                         nameEscaped,
+                         salt,
+                         ciphertext);
+
+                if (mysql_query(clientInfo->mysql, sql) != 0) {
+                    sendResponse(clientInfo->netfd,
+                                 "ERROR");
+                    continue;
+                }
+
+                // 注册成功
+                printf("Register success: %s\n", name);
+                strcpy(response, "OK");
+                sendResponse(clientInfo->netfd,
+                             response);
+
+                break;
+            }    
         }
+        //登录账户
+        else if (flag == LOGIN){
 
+            while (1) {
 
+                char name[64] = {0};
+                char salt[64] = {0};
+                char databasePassword[256] = {0};
+                char clientPassword[256] = {0};
 
+                // 接收用户名
+                ret = recvResponse(clientInfo->netfd,
+                                   name,
+                                   sizeof(name));
+                if (ret <= 0) {
+                    return -1;
+                }
+                // 转义用户名，防止 SQL 注入
+                char nameEscaped[2 * sizeof(name) + 1] = {0};
+                mysql_real_escape_string(clientInfo->mysql,
+                                         nameEscaped,
+                                         name,
+                                         (unsigned long)strlen(name));
+
+                // 查询用户名对应的 salt 和密码密文
+                char sql[512] = {0};
+
+                snprintf(sql,
+                         sizeof(sql),
+                         "SELECT salt,password FROM User WHERE name='%s'",
+                         nameEscaped);
+
+                if (mysql_query(clientInfo->mysql, sql) != 0) {
+                    sendResponse(clientInfo->netfd, "ERROR");
+                    continue;
+                }
+                // 获取查询结果
+                MYSQL_RES *result = mysql_store_result(clientInfo->mysql);
+                if (result == NULL) {
+                    sendResponse(clientInfo->netfd, "ERROR");
+                    continue;
+                }
+
+                // 用户名不存在
+                if (mysql_num_rows(result) == 0) {
+                    mysql_free_result(result);
+                    sendResponse(clientInfo->netfd,
+                                 "USER_NOT_FOUND");
+
+                    continue;
+                }
+
+                // 获取查询结果
+                MYSQL_ROW row = mysql_fetch_row(result);
+
+                if (row == NULL) {
+                    mysql_free_result(result);
+                    sendResponse(clientInfo->netfd,
+                                 "ERROR");
+                    continue;
+                }
+                // 保存数据库中的 salt
+                strncpy(salt, row[0], sizeof(salt) - 1);
+                salt[sizeof(salt) - 1] = '\0';
+
+                // 保存数据库中的密码密文
+                strncpy(databasePassword, row[1], sizeof(databasePassword) - 1);
+                databasePassword[sizeof(databasePassword) - 1] = '\0';
+
+                mysql_free_result(result);
+
+                // 将 salt 发送给客户端
+                if (sendResponse(clientInfo->netfd, salt) == -1) {
+                    return -1;
+                }
+
+                // 接收客户端使用 salt 加密后的密码
+                ret = recvResponse(clientInfo->netfd,
+                                   clientPassword,
+                                   sizeof(clientPassword));
+
+                if (ret <= 0) {
+                    return -1;
+                }
+
+                // 比较客户端密文和数据库密文
+                if (strcmp(clientPassword, databasePassword) != 0) {
+                    sendResponse(clientInfo->netfd,
+                                 "PASSWORD_ERROR");
+
+                    continue;
+                }
+
+                // 登录成功
+                printf("Login success: %s\n", name);
+                strncpy(clientInfo->name, name, sizeof(clientInfo->name) - 1);
+                clientInfo->name[sizeof(clientInfo->name) - 1] = '\0';
+                sendResponse(clientInfo->netfd, "OK");
+                return 0;
+            }
+        }
     }
     return 0;
 }
-void get_salt(char *salt,char *passwd)
+
+
+int generateSalt(char *salt)
 {
-    int i,j;
-    //取出salt,i记录密码字符下标,j记录$出现次数
-    for(i=0,j=0;passwd[i] && j != 4;++i)
-    {
-        if(passwd[i] == '$')
-            ++j;
+    static int seeded = 0;
+    if (!seeded) {
+        srand((unsigned int)(time(NULL) ^ getpid()));
+        seeded = 1;
     }
-    strncpy(salt,passwd,i);
+
+    const char charset[] =
+        "abcdefghijklmnopqrstuvwxyz"
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        "0123456789";
+
+    int len = sizeof(charset) - 1;
+
+    strcpy(salt, "$6$");
+
+    for (int i = 0; i < SALT_LEN; ++i) {
+        salt[3 + i] = charset[rand() % len];
+    }
+
+    salt[3 + SALT_LEN] = '$';
+    salt[4 + SALT_LEN] = '\0';
+
+    return 0;
 }
