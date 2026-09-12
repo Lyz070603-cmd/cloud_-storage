@@ -15,7 +15,7 @@ int main (int argc , char *argv[]){
     printf ("Connect succes!\n");
     
     if (loginFunction(sfd) != 0){
-        printf("No such user on the server\n");
+        printf("ERROR\n");
         exit(0);
     }
     //开始设置监听集合
