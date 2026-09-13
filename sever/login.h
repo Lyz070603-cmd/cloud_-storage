@@ -4,8 +4,7 @@
 #include "logrecord.h"
 #include "clientInfo.h"
 #include "protocol.h"
-#include <function.h>
-#include <shadow.h>
+#include "function.h"
 #include "workFunction.h"
 #include <mysql/mysql.h>
 

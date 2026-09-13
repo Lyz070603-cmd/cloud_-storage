@@ -1,4 +1,5 @@
 #include "login.h"
+#include <crypt.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,7 +20,6 @@ int loginhandle(clientInfo_t *clientInfo){
 
                 char name[64] = {0};
                 char passwd[32] = {0};
-                char response[100] = {0};
 
                 // 接收用户名
                 ret = recvResponse(clientInfo->netfd,
@@ -88,8 +88,6 @@ int loginhandle(clientInfo_t *clientInfo){
                     continue;
                 }
 
-                printf("salt = %s\n", salt);
-
                 // 使用 crypt 对密码进行加密
                 char *ciphertext = crypt(passwd, salt);
                 if (ciphertext == NULL) {
@@ -101,16 +99,15 @@ int loginhandle(clientInfo_t *clientInfo){
 
                     continue;
                 }
-                printf("password = %s\n", ciphertext);
-                // 将用户名、salt 和密码密文写入数据库
+                // 将用户名作为根目录行写入数据库（虚拟目录的根）
                 memset(sql, 0, sizeof(sql));
                 snprintf(sql,
                          sizeof(sql),
-                         "INSERT INTO User(name,salt,password) "
-                         "VALUES('%s','%s','%s')",
+                         "INSERT INTO User(name,filename,pre_id,path,type,sha1,tomb,password,salt) "
+                         "VALUES('%s',NULL,NULL,'/','dir',NULL,0,'%s','%s')",
                          nameEscaped,
-                         salt,
-                         ciphertext);
+                         ciphertext,
+                         salt);
 
                 if (mysql_query(clientInfo->mysql, sql) != 0) {
                     sendResponse(clientInfo->netfd,
@@ -120,9 +117,7 @@ int loginhandle(clientInfo_t *clientInfo){
 
                 // 注册成功
                 printf("Register success: %s\n", name);
-                strcpy(response, "OK");
-                sendResponse(clientInfo->netfd,
-                             response);
+                sendResponse(clientInfo->netfd, "OK");
 
                 break;
             }    
@@ -151,12 +146,12 @@ int loginhandle(clientInfo_t *clientInfo){
                                          name,
                                          (unsigned long)strlen(name));
 
-                // 查询用户名对应的 salt 和密码密文
+                // 查询用户根目录行（id、salt、密码密文）
                 char sql[512] = {0};
 
                 snprintf(sql,
                          sizeof(sql),
-                         "SELECT salt,password FROM User WHERE name='%s'",
+                         "SELECT id,salt,password FROM User WHERE name='%s' AND filename IS NULL",
                          nameEscaped);
 
                 if (mysql_query(clientInfo->mysql, sql) != 0) {
@@ -188,12 +183,15 @@ int loginhandle(clientInfo_t *clientInfo){
                                  "ERROR");
                     continue;
                 }
+                // 保存用户根目录行 id
+                int rootId = atoi(row[0]);
+
                 // 保存数据库中的 salt
-                strncpy(salt, row[0], sizeof(salt) - 1);
+                strncpy(salt, row[1], sizeof(salt) - 1);
                 salt[sizeof(salt) - 1] = '\0';
 
                 // 保存数据库中的密码密文
-                strncpy(databasePassword, row[1], sizeof(databasePassword) - 1);
+                strncpy(databasePassword, row[2], sizeof(databasePassword) - 1);
                 databasePassword[sizeof(databasePassword) - 1] = '\0';
 
                 mysql_free_result(result);
@@ -224,6 +222,12 @@ int loginhandle(clientInfo_t *clientInfo){
                 printf("Login success: %s\n", name);
                 strncpy(clientInfo->name, name, sizeof(clientInfo->name) - 1);
                 clientInfo->name[sizeof(clientInfo->name) - 1] = '\0';
+
+                // 初始化虚拟目录：根目录 id、当前目录 id、空路径栈
+                clientInfo->rootId = rootId;
+                clientInfo->curDirId = rootId;
+                clientInfo->cwdTop = 0;
+
                 sendResponse(clientInfo->netfd, "OK");
                 return 0;
             }
