@@ -23,6 +23,9 @@ int main(int argc,char  *argv[]){
     //初始化服务端
     int sfd = initTcp(argv[1],argv[2]);
 
+    //确保统一存储目录 test/ 存在
+    mkdir("test", 0777);
+
     //初始化日志
     LOG_INIT();
     //开始创建监听epoll

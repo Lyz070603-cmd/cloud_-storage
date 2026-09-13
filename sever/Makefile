@@ -18,7 +18,7 @@ all: $(TARGET)
 
 # 链接生成可执行文件
 $(TARGET): $(OBJ)
-	$(CC) $(OBJ) -o $(TARGET) -lcrypt -lpthread
+	$(CC) $(OBJ) -o $(TARGET) -lcrypt -lpthread -lmysqlclient
 
 # 单个 .c 生成 .o
 %.o: %.c

@@ -1,5 +1,5 @@
 #include "threadpool.h"
-#include "login.h"
+#include "threadworkflow.h"
 #ifndef __THREADPOOL__
 #define __THREADPOOL__
 
@@ -30,23 +30,40 @@ void * threadFunc (void *arg){
     threadpool_t *threadpool = (threadpool_t*)arg;
     while(1){
         pthread_mutex_lock(&threadpool->mutex);
-        if (threadpool->taskQueue.sizeQueue == 0){
+        // 等待任务或退出指令（用 while 处理虚假唤醒）
+        while (threadpool->taskQueue.sizeQueue == 0 && threadpool->exitFlag == 0){
             pthread_cond_wait(&threadpool->cond,&threadpool->mutex);
-
-            //如果接受到退出指令，执行退出
-            if (threadpool->exitFlag == 1){
-                pthread_mutex_unlock(&threadpool->mutex);
-                printf("begin exiting\n");
-                return NULL;
-            }
+        }
+        // 收到退出指令且没有剩余任务
+        if (threadpool->exitFlag == 1 && threadpool->taskQueue.sizeQueue == 0){
+            pthread_mutex_unlock(&threadpool->mutex);
+            printf("begin exiting\n");
+            return NULL;
         }
         clientInfo_t *clientInfo = popQueue(&threadpool->taskQueue);
-        printf("begin working\n");
-        //开始正式工作
         pthread_mutex_unlock(&threadpool->mutex);
 
-        loginhandle(clientInfo);
+        //开始连接数据库（不持有互斥锁）
+        struct MYSQL *mysql = mysql_init(NULL);
+        if (mysql == NULL) {
+            fprintf(stderr, "mysql_init failed\n");
+            close(clientInfo->netfd);
+            free(clientInfo);
+            continue;
+        }
+        if (mysql_real_connect(mysql,"localhost","root","Lyz610831","mydb",0,NULL,0) == NULL) {
+            fprintf(stderr, "mysql_real_connect failed: %s\n", mysql_error(mysql));
+            mysql_close(mysql);
+            close(clientInfo->netfd);
+            free(clientInfo);
+            continue;
+        }
+        clientInfo->mysql = mysql;
+        printf("begin working\n");
 
+        thread_workflow(clientInfo);
+
+        mysql_close(mysql);
         printf("over\n");
     }
     return 0;

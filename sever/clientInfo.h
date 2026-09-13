@@ -3,11 +3,24 @@
 #ifndef CLIENT_INFO_H
 #define CLIENT_INFO_H
 
+#include <mysql/mysql.h>
+
+// 虚拟路径最大深度 / 名字最大长度
+#define MAX_DEPTH 64
+#define MAX_NAME_LEN 64
+
 typedef struct {
     int netfd;
-    char home[1024];
-    char cwd[1024];
-    char name[64];
+    struct MYSQL *mysql;
+
+    int rootId;                             // 用户根目录行的 id（即该用户）
+    int curDirId;                           // 当前目录行的 id
+
+    char cwdStack[MAX_DEPTH][MAX_NAME_LEN]; // 路径栈：从根开始的目录名序列
+    int  cwdIdStack[MAX_DEPTH];             // 与上面平行的目录行 id 栈
+    int  cwdTop;                            // 栈中目录个数
+
+    char name[64];                          // 用户名
 } clientInfo_t;
 
 #endif

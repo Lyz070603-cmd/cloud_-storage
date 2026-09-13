@@ -4,9 +4,13 @@
 #include "logrecord.h"
 #include "clientInfo.h"
 #include "protocol.h"
-#include <function.h>
-#include <shadow.h>
+#include "function.h"
 #include "workFunction.h"
+#include <mysql/mysql.h>
+
+#define SIGNUP 1
+#define LOGIN 2
+#define SALT_LEN 8
 int loginhandle(clientInfo_t *clientInfo);
-void get_salt(char *salt,char *passwd);
+int generateSalt(char *salt);
 #endif
