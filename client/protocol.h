@@ -27,6 +27,9 @@ typedef struct {
     char data[1000];
 } command_t;
 
+/* 每条命令最多拆分的参数个数 */
+#define MAX_ARGS 10
+
 //分配命令，保证客户端发送给服务端的都是相对应的命令
 int wordSegmentation(char *buf,int *argc,char *argv[],command_t * command);
 //保证发送完整数据

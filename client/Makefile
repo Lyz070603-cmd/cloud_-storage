@@ -20,7 +20,7 @@ all: $(TARGET)
 
 # 链接生成可执行文件
 $(TARGET): $(OBJ)
-	$(CC) $(OBJ) -o $(TARGET)
+	$(CC) $(OBJ) -o $(TARGET) -lcrypt -lcrypto
 
 
 # 单个.c生成.o

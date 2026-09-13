@@ -11,7 +11,7 @@ int send_Message(int sfd){
         return 0;
     }
     int argc = 0;
-    char *argv[10] = {0};
+    char *argv[MAX_ARGS] = {0};
     command_t command;
     memset(&command,0,sizeof(command));
     wordSegmentation(buf,&argc,argv,&command);

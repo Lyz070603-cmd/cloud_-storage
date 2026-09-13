@@ -1,4 +1,4 @@
-#include <function.h>
+#include "function.h"
 #include "funcsend_recv.h"
 #include "login.h"
 int main (int argc , char *argv[]){
@@ -14,10 +14,17 @@ int main (int argc , char *argv[]){
     ERROR_CHECK(ret, -1, "connect");
     printf ("Connect succes!\n");
     
-    if (loginFunction(sfd) != 0){
-        printf("No such user on the server\n");
-        exit(0);
+    ret = loginFunction(sfd);
+    if (ret == -1){
+        printf("ERROR\n");
+        exit(1);
     }
+    if (ret == 1){
+        // 用户主动选择退出
+        close(sfd);
+        return 0;
+    }
+    // ret == 0：登录成功，继续进入命令循环
     //开始设置监听集合
     int epfd = epoll_create(1);
     struct epoll_event event;
