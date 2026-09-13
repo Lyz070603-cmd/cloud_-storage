@@ -9,8 +9,8 @@
 int wordSegmentation(char *buf,int *argc,char *argv[],command_t * command){
     char *p = strtok(buf, " \t\n");
 
-    while (p != NULL ) {
-        argv[*(argc)] = p;
+    while (p != NULL && *argc < MAX_ARGS) {
+        argv[*argc] = p;
         (*argc)++;
         p = strtok(NULL, " \t\n");
     }

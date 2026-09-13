@@ -24,9 +24,9 @@ int loginFunction(int sfd)
             return -1;
         }
         int choice = atoi(buf);
-        // 退出
+        // 退出（返回 1 表示用户主动退出）
         if (choice == 0) {
-            return 0;
+            return 1;
         }
 
         // 注册
