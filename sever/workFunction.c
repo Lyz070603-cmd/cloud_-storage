@@ -9,18 +9,17 @@
 
 int workFunc(clientInfo_t *client)
 {
-    while (1) {
         command_t command;
         // 1. 接收客户端发送的命令
         int ret = recvCommand(client->netfd, &command);
         if (ret == 0) {
             // 客户端断开
-            break;
+            return -1;
         }
         if (ret == -1) {
             // 接收出错
             perror("recvCommand");
-            break;
+            return -1;
         }
         // 2. 根据命令类型进行分发
         switch (command.cmd) {
@@ -68,9 +67,7 @@ int workFunc(clientInfo_t *client)
                 sendResponse(client->netfd, "Unknown command");
                 break;
         }
-    }
 
-    close(client->netfd);
     return 0;
 }
 
