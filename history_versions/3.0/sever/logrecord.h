@@ -30,7 +30,7 @@
                    (action),                                        \
                    (ret),                                           \
                    __FILE__,                                        \
-                   __FUNCTION__,                                    \
+                   __func__,                                    \
                    __LINE__);                                       \
         }                                                           \
     } while (0)

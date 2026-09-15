@@ -1,7 +1,7 @@
 #include "funcsend_recv.h"
 
-#ifndef __FUNCTION__
-#define __FUNCTION__
+#ifndef __FUNCSEND__
+#define __FUNCSEND__
 
 int send_Message(int sfd){
     char buf[1024] = {0};

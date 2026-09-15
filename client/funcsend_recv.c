@@ -1,7 +1,5 @@
 #include "funcsend_recv.h"
 
-#ifndef __FUNCTION__
-#define __FUNCTION__
 
 int send_Message(int sfd){
     char buf[1024] = {0};
@@ -48,4 +46,3 @@ int send_Message(int sfd){
 
     return 0;
 }
-#endif
