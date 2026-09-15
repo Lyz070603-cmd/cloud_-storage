@@ -30,6 +30,9 @@ typedef struct {
 /* 每条命令最多拆分的参数个数 */
 #define MAX_ARGS 10
 
+/* JWT token 缓冲大小 */
+#define TOKEN_BUF_SIZE 512
+
 //分配命令，保证客户端发送给服务端的都是相对应的命令
 int wordSegmentation(char *buf,int *argc,char *argv[],command_t * command);
 //保证发送完整数据

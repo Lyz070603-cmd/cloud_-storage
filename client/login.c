@@ -200,6 +200,9 @@ int loginFunction(int sfd)
 
                     printf("Login success\n");
 
+                    strncpy(g_username, name, sizeof(g_username) - 1);
+                    g_username[sizeof(g_username) - 1] = '\0';
+
                     return 0;
                 }
 

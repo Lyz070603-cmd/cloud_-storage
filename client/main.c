@@ -1,8 +1,15 @@
 #include "function.h"
 #include "funcsend_recv.h"
 #include "login.h"
+
+char g_username[64] = {0};
+char g_serverIp[64] = {0};
+
 int main (int argc , char *argv[]){
     ARGS_CHECK(argc,3);
+
+    strncpy(g_serverIp, argv[1], sizeof(g_serverIp) - 1);
+    g_serverIp[sizeof(g_serverIp) - 1] = '\0';
 
     //初始化客户端
     int sfd = socket(AF_INET,SOCK_STREAM,0);
