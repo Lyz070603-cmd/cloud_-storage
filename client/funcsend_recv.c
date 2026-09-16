@@ -1,6 +1,5 @@
 #include "funcsend_recv.h"
 
-
 int send_Message(int sfd){
     char buf[1024] = {0};
     int ret = read(STDIN_FILENO,buf,sizeof(buf));

@@ -1,27 +1,35 @@
 #include"command.h"
-#include <openssl/sha.h>
+#include <openssl/evp.h>
 
 // 计算打开文件的 SHA1，输出 40 位十六进制（hexout 至少 41 字节）
 // 计算完成后把文件偏移复位到 0，方便后续再读
 static int sha1_fd(int fd, char *hexout) {
-    SHA_CTX ctx;
-    SHA1_Init(&ctx);
+    EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+    if (ctx == NULL) return -1;
+    if (EVP_DigestInit_ex(ctx, EVP_sha1(), NULL) != 1) {
+        EVP_MD_CTX_free(ctx);
+        return -1;
+    }
 
     unsigned char buf[8192];
     ssize_t n;
     while ((n = read(fd, buf, sizeof(buf))) > 0) {
-        SHA1_Update(&ctx, buf, (size_t)n);
+        EVP_DigestUpdate(ctx, buf, (size_t)n);
     }
     if (n == -1) {
+        EVP_MD_CTX_free(ctx);
         return -1;
     }
 
-    unsigned char hash[SHA_DIGEST_LENGTH];
-    SHA1_Final(hash, &ctx);
-    for (int i = 0; i < SHA_DIGEST_LENGTH; ++i) {
+    unsigned char hash[EVP_MAX_MD_SIZE];
+    unsigned int hashLen = 0;
+    EVP_DigestFinal_ex(ctx, hash, &hashLen);
+    EVP_MD_CTX_free(ctx);
+
+    for (unsigned int i = 0; i < hashLen; ++i) {
         sprintf(hexout + i * 2, "%02x", hash[i]);
     }
-    hexout[40] = '\0';
+    hexout[hashLen * 2] = '\0';
 
     if (lseek(fd, 0, SEEK_SET) == (off_t)-1) {
         return -1;
@@ -102,7 +110,7 @@ int getsFunction(int sfd,command_t *command,char * argv[],int argc){
 
     const char *filename = argv[1];
 
-    // 构造 gets 命令
+    // 1. 构造并发送 gets 命令到主连接
     memset(command, 0, sizeof(command_t));
     command->cmd = CMD_GETS;
     strcpy(command->data, filename);
@@ -113,32 +121,62 @@ int getsFunction(int sfd,command_t *command,char * argv[],int argc){
         return -1;
     }
 
-    // 等待服务器 READY
+    // 2. 接收 token + 数据端口 + 当前路径
+    char token[TOKEN_BUF_SIZE] = {0};
+    int port = 0;
+    char path[1024] = {0};
+    if (recvResponse(sfd, token, sizeof(token)) <= 0) return -1;
+    if (recvAll(sfd, &port, sizeof(port)) <= 0) return -1;
+    if (recvResponse(sfd, path, sizeof(path)) <= 0) return -1;
+
+    // 3. 连接数据端口
+    int dfd = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in daddr;
+    memset(&daddr, 0, sizeof(daddr));
+    daddr.sin_family = AF_INET;
+    daddr.sin_port = htons(port);
+    daddr.sin_addr.s_addr = inet_addr(g_serverIp);
+    if (connect(dfd, (struct sockaddr*)&daddr, sizeof(daddr)) == -1) {
+        perror("connect data");
+        return -1;
+    }
+
+    // 4. 发送 username + token + command + path 给数据线程
+    if (sendResponse(dfd, g_username) == -1 ||
+        sendResponse(dfd, token) == -1 ||
+        sendCommand(dfd, command) == -1 ||
+        sendResponse(dfd, path) == -1) {
+        close(dfd);
+        return -1;
+    }
+
+    // 5. 在数据连接上做下载
     char response[100] = {0};
-    if (recvResponse(sfd, response, sizeof(response)) <= 0) {
+    if (recvResponse(dfd, response, sizeof(response)) <= 0) {
         perror("recvResponse");
+        close(dfd);
         return -1;
     }
     if (strcmp(response, "READY") != 0) {
         printf("Server response: %s\n", response);
+        close(dfd);
         return 0;
     }
 
-    // 接收文件总大小
     off_t filesize = 0;
-    if (recvAll(sfd, &filesize, sizeof(filesize)) <= 0) {
+    if (recvAll(dfd, &filesize, sizeof(filesize)) <= 0) {
         perror("recvAll filesize");
+        close(dfd);
         return -1;
     }
 
-    // 打开本地文件写
     int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0666);
     if (fd == -1) {
         perror("open");
+        close(dfd);
         return -1;
     }
 
-    // 接收文件内容
     char buf[8192];
     off_t received = 0;
     while (received < filesize) {
@@ -146,14 +184,16 @@ int getsFunction(int sfd,command_t *command,char * argv[],int argc){
         if (filesize - received < (off_t)n) {
             n = (size_t)(filesize - received);
         }
-        if (recvAll(sfd, buf, n) <= 0) {
+        if (recvAll(dfd, buf, n) <= 0) {
             perror("recvAll file");
             close(fd);
+            close(dfd);
             return -1;
         }
         if (write(fd, buf, n) != (ssize_t)n) {
             perror("write");
             close(fd);
+            close(dfd);
             return -1;
         }
         received += (off_t)n;
@@ -165,10 +205,9 @@ int getsFunction(int sfd,command_t *command,char * argv[],int argc){
     printf("\n");
     close(fd);
 
-    // 等待服务器最终回复
     memset(response, 0, sizeof(response));
-    if (recvResponse(sfd, response, sizeof(response)) <= 0) {
-        perror("recvResponse");
+    if (recvResponse(dfd, response, sizeof(response)) <= 0) {
+        close(dfd);
         return -1;
     }
     if (strcmp(response, "OK") == 0) {
@@ -176,6 +215,7 @@ int getsFunction(int sfd,command_t *command,char * argv[],int argc){
     } else {
         printf("Download failed: %s\n", response);
     }
+    close(dfd);
     return 0;
 }
 
@@ -189,22 +229,18 @@ int putsFunction(int sfd, command_t *command, char *argv[], int argc)
 
     const char *filename = argv[1];
 
-    // 打开本地文件
+    // 打开本地文件并计算 SHA1 / 大小
     int fd = open(filename, O_RDONLY);
     if (fd == -1) {
         perror("open");
         return 0;
     }
-
-    // 计算文件 SHA1
     char sha1Hex[41] = {0};
     if (sha1_fd(fd, sha1Hex) != 0) {
         perror("sha1");
         close(fd);
         return -1;
     }
-
-    // 获取文件大小
     struct stat st;
     if (fstat(fd, &st) == -1) {
         perror("fstat");
@@ -213,7 +249,7 @@ int putsFunction(int sfd, command_t *command, char *argv[], int argc)
     }
     off_t filesize = st.st_size;
 
-    // 构造并发送 puts 命令
+    // 1. 构造并发送 puts 命令到主连接
     memset(command, 0, sizeof(command_t));
     command->cmd = CMD_PUTS;
     strcpy(command->data, filename);
@@ -225,36 +261,65 @@ int putsFunction(int sfd, command_t *command, char *argv[], int argc)
         return -1;
     }
 
-    // 发送 SHA1，让服务端判断是否秒传
-    if (sendResponse(sfd, sha1Hex) == -1) {
-        perror("sendResponse sha1");
+    // 2. 接收 token + 数据端口 + 当前路径
+    char token[TOKEN_BUF_SIZE] = {0};
+    int port = 0;
+    char path[1024] = {0};
+    if (recvResponse(sfd, token, sizeof(token)) <= 0) { close(fd); return -1; }
+    if (recvAll(sfd, &port, sizeof(port)) <= 0) { close(fd); return -1; }
+    if (recvResponse(sfd, path, sizeof(path)) <= 0) { close(fd); return -1; }
+
+    // 3. 连接数据端口
+    int dfd = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in daddr;
+    memset(&daddr, 0, sizeof(daddr));
+    daddr.sin_family = AF_INET;
+    daddr.sin_port = htons(port);
+    daddr.sin_addr.s_addr = inet_addr(g_serverIp);
+    if (connect(dfd, (struct sockaddr*)&daddr, sizeof(daddr)) == -1) {
+        perror("connect data");
         close(fd);
         return -1;
     }
 
-    // 等待服务端决定：SKIP(秒传) 或 READY(需要上传)
+    // 4. 发送 username + token + command + path 给数据线程
+    if (sendResponse(dfd, g_username) == -1 ||
+        sendResponse(dfd, token) == -1 ||
+        sendCommand(dfd, command) == -1 ||
+        sendResponse(dfd, path) == -1) {
+        close(dfd);
+        close(fd);
+        return -1;
+    }
+
+    // 5. 在数据连接上做上传（先发 SHA1 判断秒传）
+    if (sendResponse(dfd, sha1Hex) == -1) {
+        close(dfd);
+        close(fd);
+        return -1;
+    }
     char response[100] = {0};
-    if (recvResponse(sfd, response, sizeof(response)) <= 0) {
-        perror("recvResponse");
+    if (recvResponse(dfd, response, sizeof(response)) <= 0) {
+        close(dfd);
         close(fd);
         return -1;
     }
-
     if (strcmp(response, "SKIP") == 0) {
         printf("秒传成功: %s\n", filename);
+        close(dfd);
         close(fd);
         return 0;
     }
-
     if (strcmp(response, "READY") != 0) {
         printf("Server refused: %s\n", response);
+        close(dfd);
         close(fd);
         return 0;
     }
 
     // 发送文件大小
-    if (sendAll(sfd, &filesize, sizeof(filesize)) == -1) {
-        perror("sendAll filesize");
+    if (sendAll(dfd, &filesize, sizeof(filesize)) == -1) {
+        close(dfd);
         close(fd);
         return -1;
     }
@@ -263,18 +328,19 @@ int putsFunction(int sfd, command_t *command, char *argv[], int argc)
     char buf[8192];
     ssize_t n;
     while ((n = read(fd, buf, sizeof(buf))) > 0) {
-        if (sendAll(sfd, buf, n) == -1) {
+        if (sendAll(dfd, buf, n) == -1) {
             perror("sendAll file");
+            close(dfd);
             close(fd);
             return -1;
         }
     }
     close(fd);
 
-    // 等待服务器最终回复
+    // 等待最终回复
     memset(response, 0, sizeof(response));
-    if (recvResponse(sfd, response, sizeof(response)) <= 0) {
-        perror("recvResponse");
+    if (recvResponse(dfd, response, sizeof(response)) <= 0) {
+        close(dfd);
         return -1;
     }
     if (strcmp(response, "OK") == 0) {
@@ -282,6 +348,7 @@ int putsFunction(int sfd, command_t *command, char *argv[], int argc)
     } else {
         printf("Upload failed: %s\n", response);
     }
+    close(dfd);
     return 0;
 }
 
