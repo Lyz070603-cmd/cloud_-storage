@@ -227,7 +227,8 @@ int loginhandle(clientInfo_t *clientInfo){
                 clientInfo->rootId = rootId;
                 clientInfo->curDirId = rootId;
                 clientInfo->cwdTop = 0;
-
+                
+            
                 sendResponse(clientInfo->netfd, "OK");
                 return 0;
             }

@@ -17,8 +17,4 @@ CREATE TABLE IF NOT EXISTS User (
     UNIQUE KEY uq_name (name)
 );
 
--- ===== 方案二：已有旧表时，修正字段 =====
--- ALTER TABLE User MODIFY sha1 VARCHAR(40) NULL;
--- ALTER TABLE User MODIFY name VARCHAR(50) NULL;
--- 若上面把唯一索引弄丢了，再执行：
--- ALTER TABLE User ADD UNIQUE KEY uq_name (name);
+

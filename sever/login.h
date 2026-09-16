@@ -6,6 +6,7 @@
 #include "protocol.h"
 #include "function.h"
 #include "workFunction.h"
+#include "encodingtoken.h"
 #include <mysql/mysql.h>
 
 #define SIGNUP 1

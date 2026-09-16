@@ -272,7 +272,8 @@ static int listDirContents(clientInfo_t *client, int dirId) {
     return 0;
 }
 
-int handleCd(clientInfo_t *client, const char *path) {
+// 解析路径并提交到 client（不发送响应）。成功返回 0，失败返回 -1。
+int resolveAndCommit(clientInfo_t *client, const char *path) {
     char tmpStack[MAX_DEPTH][MAX_NAME_LEN];
     int tmpIds[MAX_DEPTH];
     int tmpTop = 0;
@@ -280,11 +281,9 @@ int handleCd(clientInfo_t *client, const char *path) {
 
     int r = resolveEntry(client, path, tmpStack, tmpIds, &tmpTop, &id, type, sha1Hex);
     if (r != 1 || strcmp(type, "dir") != 0) {
-        sendResponse(client->netfd, "Directory does not exist\n");
         return -1;
     }
 
-    // 提交：把解析结果复制回 client
     client->cwdTop = tmpTop;
     for (int i = 0; i < tmpTop; ++i) {
         strncpy(client->cwdStack[i], tmpStack[i], MAX_NAME_LEN - 1);
@@ -292,6 +291,14 @@ int handleCd(clientInfo_t *client, const char *path) {
         client->cwdIdStack[i] = tmpIds[i];
     }
     client->curDirId = id;
+    return 0;
+}
+
+int handleCd(clientInfo_t *client, const char *path) {
+    if (resolveAndCommit(client, path) != 0) {
+        sendResponse(client->netfd, "Directory does not exist\n");
+        return -1;
+    }
     sendResponse(client->netfd, "OK\n");
     return 0;
 }
@@ -321,9 +328,13 @@ int handleLs(clientInfo_t *client, const char *path) {
     return listDirContents(client, id);
 }
 
+void getCwdPath(clientInfo_t *client, char *out, size_t outSize) {
+    buildPath(client, out, outSize);
+}
+
 int handlePwd(clientInfo_t *client) {
     char path[1024];
-    buildPath(client, path, sizeof(path));
+    getCwdPath(client, path, sizeof(path));
     char res[1100];
     snprintf(res, sizeof(res), "%s\n", path);
     sendResponse(client->netfd, res);
