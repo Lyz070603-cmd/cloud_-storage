@@ -6,10 +6,14 @@
 #include "protocol.h"
 #include "encodingtoken.h"
 #include "datathread.h"
+#include "idleTimer.h"
 
 #define MAX_CLIENTS 1024
 
 int exitpipe[2] = {0};
+
+// 30 秒不活跃踢人环形队列（仅主线程访问，无需加锁）
+static idleTimer_t idleTimer;
 
 void handler(int signum){
     write(exitpipe[1], "1", sizeof(char));
@@ -43,7 +47,33 @@ static void removeClient(clientInfo_t **arr, int *num, int epfd, clientInfo_t *c
             break;
         }
     }
+    idleTimerRemove(&idleTimer, ci);  // 从环形队列摘除，避免悬空
     free(ci);
+}
+
+// 计时器心跳：按实际经过的整秒推进环形队列，踢出 30 秒不活跃的用户
+static void tickIdleTimer(clientInfo_t **arr, int *num, int epfd, struct timespec *lastTick){
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+
+    long long elapsedMs = (now.tv_sec - lastTick->tv_sec) * 1000LL
+                        + (now.tv_nsec - lastTick->tv_nsec) / 1000000LL;
+    int ticks = (int)(elapsedMs / 1000);
+    if (ticks <= 0) return;
+
+    // 只推进整秒，不足 1 秒的余量保留到下一轮
+    lastTick->tv_sec += ticks;
+
+    // 推进一圈即可：一圈后所有格子都已被清空，多出来的秒数无意义
+    if (ticks > IDLE_SLOTS) ticks = IDLE_SLOTS;
+
+    clientInfo_t *expired[MAX_CLIENTS];
+    for (int i = 0; i < ticks; ++i){
+        int n = idleTimerAdvance(&idleTimer, expired, MAX_CLIENTS);
+        for (int k = 0; k < n; ++k){
+            removeClient(arr, num, epfd, expired[k]);
+        }
+    }
 }
 
 int main(int argc, char *argv[]){
@@ -86,9 +116,14 @@ int main(int argc, char *argv[]){
 
     srand((unsigned int)(time(NULL) ^ getpid()));
 
+    // 初始化 30 秒不活跃环形队列与心跳基准时间
+    idleTimerInit(&idleTimer);
+    struct timespec lastTick;
+    clock_gettime(CLOCK_MONOTONIC, &lastTick);
+
     while (1){
         struct epoll_event readyEvent[1024];
-        int readyNum = epoll_wait(epfd, readyEvent, 1024, -1);
+        int readyNum = epoll_wait(epfd, readyEvent, 1024, 1000);  // 1 秒超时，供心跳计时
 
         for (int i = 0; i < readyNum; ++i){
             int fd = readyEvent[i].data.fd;
@@ -115,6 +150,7 @@ int main(int argc, char *argv[]){
                 if (loginhandle(ci) == 0){
                     clientArr[clientnum++] = ci;
                     epollAdd(epfd, netfd);
+                    idleTimerTouch(&idleTimer, ci);  // 登录成功即入队，开始计时
                     printf("accept new client\n");
                 } else {
                     mysql_close(mysql);
@@ -142,6 +178,9 @@ int main(int argc, char *argv[]){
                     continue;
                 }
 
+                // 用户活跃（收到命令），重置 30 秒计时：删除旧记录 + 放入最新格子
+                idleTimerTouch(&idleTimer, ci);
+
                 if (command.cmd == CMD_PUTS || command.cmd == CMD_GETS){
                     // 长命令：生成 token + 随机数据端口 + 当前路径
                     char token[TOKEN_BUF_SIZE] = {0};
@@ -161,6 +200,9 @@ int main(int argc, char *argv[]){
                 }
             }
         }
+
+        // 心跳：推进环形队列，踢出 30 秒不活跃的用户
+        tickIdleTimer(clientArr, &clientnum, epfd, &lastTick);
     }
     return 0;
 }
